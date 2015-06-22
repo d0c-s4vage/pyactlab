@@ -17,8 +17,7 @@ import threading
 try:
 	import markdown
 
-	sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-	from lib.md_exts import ActLabCode
+	from pyactlab.misc.md_exts import ActLabCode
 except:
 	print("markdown could not be imported.\n\nRun 'pip install markdown' to install it.\n\nUntil then markdown files will not be converted to html")
 	markdown = None
@@ -43,7 +42,6 @@ else:
 	readline.parse_and_bind("tab: complete")
 
 # need realpath to be able to handle symlinked actlab scripts!
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
 
 from pyactlab import ActLabClient, ActLabError, ConnectionError, InvalidCredentialsError
 import pyactlab.models
@@ -1162,7 +1160,7 @@ def init_git(directory):
 	# copy the post_receive_hook to directory/.git/hooks/post-receive and
 	# make sure it's executable
 	# NOTE the use of realpath - works with symlinked actlab scripts
-	post_receive_hook = os.path.join(os.path.abspath(os.path.dirname(os.path.realpath(__file__))), "lib", "git_post_commit.py")
+    post_recive_hook = os.path.join(pyactlab.__file__, "misc", "git_post_commit.py")
 	dst_hook = os.path.join(directory, ".git", "hooks", "post-commit")
 	shutil.copyfile(post_receive_hook, dst_hook)
 	st = os.stat(dst_hook)

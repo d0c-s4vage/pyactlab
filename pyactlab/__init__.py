@@ -29,7 +29,7 @@ class ActLabClient(object):
 	"""
 
 	_client_name = "ActLabClient"
-	_client_vendor = "Accuvant LABS"
+	_client_vendor = "PYACTLAB"
 
 	# TODO - static method to fetch API key from email/password
 	def __init__(self, host, key=None, email=None, password=None):

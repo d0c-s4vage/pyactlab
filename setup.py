@@ -34,9 +34,16 @@ setup(
 	install_requires = [
 		"requests",
                 "xmltodict",
+                "html2text",
+                "markdown",
 	],
     classifiers = [
         'Programming Language :: Python :: 2',
     ],
-    packages=['pfp', 'pfp.native'],
+    scripts = [
+        os.path.join("bin", "actlab"),
+    ],
+    packages = [
+        "pyactlab", "pyactlab.lib"
+    ]
 )
