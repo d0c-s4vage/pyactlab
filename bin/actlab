@@ -1,0 +1,1211 @@
+#!/usr/bin/env python
+
+import argparse
+import cmd
+import codecs
+import distutils.spawn
+import getpass
+import glob
+import json
+import os
+import string
+import subprocess
+import sys
+import tempfile
+import threading
+
+try:
+	import markdown
+
+	sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+	from lib.md_exts import ActLabCode
+except:
+	print("markdown could not be imported.\n\nRun 'pip install markdown' to install it.\n\nUntil then markdown files will not be converted to html")
+	markdown = None
+
+try:
+	import html2text
+except:
+	print("html2text could not be imported.\n\nRun 'pip install html2text' to install it.\n\nUntil then html values will remain as html and will not be converted to markdown")
+	html2text = None
+
+import os
+import re
+import shutil
+import stat
+import subprocess
+
+import readline
+import rlcompleter
+if 'libedit' in readline.__doc__:
+	readline.parse_and_bind("bind ^I rl_complete")
+else:
+	readline.parse_and_bind("tab: complete")
+
+# need realpath to be able to handle symlinked actlab scripts!
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), ".."))
+
+from pyactlab import ActLabClient, ActLabError, ConnectionError, InvalidCredentialsError
+import pyactlab.models
+
+class Colors:
+	HEADER = '\033[95m'
+	OKBLUE = '\033[94m'
+	OKGREEN = '\033[92m'
+	WARNING = '\033[93m'
+	FAIL = '\033[91m'
+	ENDC = '\033[0m'
+
+def _prompt(msg):
+	"""
+	Prompt the user for some information
+	"""
+	msg = u"\n".join(Colors.WARNING + u"[?]  {}".format(line) + Colors.ENDC for line in unicode(msg).split("\n"))
+	return raw_input(msg)
+
+def _ok(msg):
+	"""
+	Print the message with a success/ok color
+	"""
+	msg = u"\n".join(Colors.OKGREEN + u"{}{}".format(u"[.]  ", line) + Colors.ENDC for line in unicode(msg).split("\n"))
+	print(msg)
+
+def _out(msg, raw=False):
+	"""
+	Print the message with standard formatting
+	"""
+	pre = Colors.OKBLUE + "[+]" + Colors.ENDC + "  "
+	if raw:
+		pre = "    "
+	msg = u"\n".join(u"{}{}".format(pre, line) for line in unicode(msg).split("\n"))
+	print(msg)
+
+def _err(msg):
+	"""
+	Print an error message
+	"""
+	# TODO colors?
+	msg = u"\n".join(Colors.FAIL + u"[E]  {}".format(line) + Colors.ENDC for line in unicode(msg).split("\n"))
+	print(msg)
+
+class Config(object):
+	_fields = {
+		"company": None,
+		"project": None,
+		"authkey": None,
+		"host": None,
+		"email": None,
+		"notebook": None,
+		"task": None,
+		"page": None
+	}
+
+	def __init__(self, path):
+		"""
+		Generic json config loader/saver
+		"""
+		if path is None:
+			self._path = path
+			self._no_save = True
+		else:
+			self._path = os.path.abspath(os.path.expanduser(path))
+			if os.path.exists(path):
+				with open(self._path, "r") as f:
+					saved_fields = json.loads(f.read())
+				
+				# merge the saved fields with the defaults, where saved overwrites
+				# the defaults
+				self._fields = dict(self._fields.items() + saved_fields.items())
+			else:
+				self.save()
+	
+	def get_root(self):
+		"""
+		Return the root DIRECTORY of the project
+		"""
+		return os.path.dirname(os.path.realpath(self._path))
+	
+	def save(self):
+		"""
+		Save the config. If this Config object was created with a None path
+		then this function is a nop.
+		"""
+		if self._path is None:
+			return
+
+		with open(self._path, "w") as f:
+			f.write(json.dumps(self._fields))
+	
+	def _changed(self):
+		"""
+		Handle any changes to the config via __set{item,attr}__
+		"""
+		# TODO rethink this... might not be the best approach. Perhaps
+		# only on "quit" and SIGTERM and SIGINT or something
+		self.save()
+	
+	def __getitem__(self, k):
+		"""
+		Also expose `_fields` as dict k/v access (get)
+		"""
+		return self._fields[k]
+	
+	def __setitem__(self, k, v):
+		"""
+		Also expose `_fields` as dict k/v access (set)
+		"""
+		self._fields[k] = v
+		self._changed()
+
+		return self._fields[k]
+	
+	def __getattr__(self, k):
+		"""
+		Make `_fields` accessible via dot notation (get)
+		"""
+		if k in self._fields:
+			return self._fields[k]
+		else:
+			return object.__getattr__(self, k)
+	
+	def __setattr__(self, k, v):
+		"""
+		Make `_fields` accessible via dot notation (set)
+		"""
+		if k in self._fields:
+			self._fields[k] = v
+			self._changed()
+			return v
+		else:
+			return object.__setattr__(self, k, v)
+
+OPT_OUT_CONFIG = Config(None)
+
+class ActLabShell(cmd.Cmd):
+	intro = "Welcome to ActiveCollab Shell!"
+	prompt = "actlab> "
+	client = None
+
+	company = None
+	project = None
+	notebook = None
+	task = None
+	page = None
+
+	cache = {}
+
+	curr_model = None
+
+	def __init__(self, config_path=None, load_models=True, y=False):
+		"""
+		"""
+		cmd.Cmd.__init__(self)
+
+		self._resolve_config(config_path, y=y)
+
+		if self.config.authkey is not None and self.config.host is not None:
+			self._attempt_login_from_config()
+			if self._is_connected() and load_models:
+				self._load_models()
+
+		self._update_prompt()
+
+	# -------------------------------------
+	# UTILS
+	# -------------------------------------
+
+	def _model_name_to_file_name(self, id, name):
+		allowed = string.digits + string.letters + "_"
+		name = str(id) + "-" + filter(allowed.__contains__, name.replace(" ", "_")).lower()
+		return name
+
+	def _create_notebook_folder(self, notebook):
+		"""
+		Create a local folder for notebook in the notes directory
+		"""
+		name = self._model_name_to_file_name(notebook.id, notebook.name)
+
+		root_dir = self.config.get_root()
+		notebook_folder_path = os.path.join(root_dir, "notes", name)
+		if not os.path.exists(notebook_folder_path):
+			os.mkdir(notebook_folder_path)
+			_ok("Created {}".format(notebook_folder_path))
+
+		desc_path = os.path.join(notebook_folder_path, "desc.md")
+		if not os.path.exists(desc_path):
+			value = self._deprocess_value(notebook.body)
+			if value is None:
+				value = ""
+			with codecs.open(desc_path, "w", encoding="utf-8") as f:
+				f.write("<!-- $$actlab: {} -->\n\n{}".format(
+					json.dumps({
+					"project": notebook.project_id,
+					"notebook": notebook.id,
+					"update": "body"
+					}),
+					value,
+				))
+				_ok("Created {}".format(desc_path))
+
+		return notebook_folder_path
+	
+	def _create_notebook_page_file(self, page):
+		"""
+		Create a page for the notebook in the notes directory, in the parent notebook's folder
+		"""
+		name = self._model_name_to_file_name(page.id, page.name)
+
+		root_dir = self.config.get_root()
+		maybe_paths = glob.glob(os.path.join(root_dir, "notes", "{}-*".format(page.notebook_id)))
+		if len(maybe_paths) == 0:
+			if self.notebook.id == page.notebook_id:
+				notebook_path = self._create_notebook_folder(self.notebook)
+			else:
+				_err("Could not create notebook page")
+				return
+		else:
+			notebook_path = maybe_paths[0]
+
+		desc_path = os.path.join(notebook_path, name + ".md")
+		if not os.path.exists(desc_path):
+			value = self._deprocess_value(page.body)
+			if value is None:
+				value = ""
+			with codecs.open(desc_path, "w", encoding="utf-8") as f:
+				f.write(u"<!-- $$actlab: {} -->\n\n{}".format(
+					json.dumps({
+					"project": page.project_id,
+					"notebook": page.notebook_id,
+					"page": page.id,
+					"update": "body"
+					}),
+					value
+				))
+				_ok("Created {}".format(desc_path))
+
+	def _attempt_login_from_config(self):
+		"""
+		Attempt to login using the credentials in the found config file
+		"""
+		try:
+			self.client = ActLabClient(host=self.config.host, key=self.config.authkey)
+		except ConnectionError as e:
+			_err("Could not connect to host '{}'".format(self.config.host))
+			self.client = None
+			return
+	
+	def _load_page(self):
+		if self.config.page and self.page is None:
+			self.page = self.client.get_notebook_page(self.config.project, self.config.page)
+			_out("fetched page")
+			self.curr_model = self.page
+
+	def _load_notebook(self):
+		if self.config.notebook and self.notebook is None:
+			self.notebook = self.client.get_notebook(self.config.project, self.config.notebook)
+			_out("fetched notebook")
+			self.curr_model = self.notebook
+	
+	def _load_project(self):
+		# project must come before company in case self.config.company is set from
+		# the loaded project
+		if self.config.project and self.project is None:
+			self.project = self.client.get_project(self.config.project)
+			_out("fetched project")
+			self.config.company = self.project.company_id
+			self.curr_model = self.project
+	
+	def _load_company(self):
+		if self.config.company and self.company is None:
+			self.company = self.client.get_company(self.config.company)
+			_out("fetched company")
+			self.curr_model = self.company
+	
+	def _load_task(self):
+		if self.config.task and self.task is None:
+			self.task = self.client.get_task(self.config.project, self.config.task)
+			_out("fetched task")
+			self.curr_model = self.task
+
+	def _load_project_and_company(self):
+		self._load_project()
+		self._load_company()
+
+	def _load_models(self):
+		"""
+		Load models specified in the config
+		"""
+
+		threads = []
+		threads.append(threading.Thread(target=self._load_page))
+		threads.append(threading.Thread(target=self._load_notebook))
+		threads.append(threading.Thread(target=self._load_task))
+
+		# we have the ids already, just need to load them. can be done separately
+		if self.config.company and self.config.project:
+			threads.append(threading.Thread(target=self._load_project))
+			threads.append(threading.Thread(target=self._load_company))
+		else:
+			threads.append(threading.Thread(target=self._load_project_and_company))
+
+		for t in threads:
+			t.start()
+
+		for t in threads:
+			t.join()
+
+		# choose the curr_model in reverse order from above though (we want the most
+		# specific model)
+		if self.page:
+			self.curr_model = self.page
+		elif self.notebook:
+			self.curr_model = self.notebook
+		elif self.task:
+			self.curr_model = self.task
+		elif self.project:
+			self.curr_model = self.project
+		elif self.company:
+			self.curr_model = self.company
+
+	def _update(self):
+		"""
+		Update things
+		"""
+		self._sync_config()
+		self._update_prompt()
+	
+	def _sync_config(self):
+		"""
+		Sync the config with the current model ids and settings
+		"""
+		self.config.company = self.company.id if self.company is not None else None
+		self.config.project = self.project.id if self.project is not None else None
+		self.config.notebook = self.notebook.id if self.notebook is not None else None
+		self.config.page = self.page.id if self.page is not None else None
+		self.config.task = self.task.task_id if self.task is not None else None
+
+	def _update_prompt(self):
+		"""
+		Update the prompt to reflect the current company/project being used
+		"""
+		sep = " | "
+		self.prompt = Colors.HEADER + "actlab"
+
+		if self.company:
+			self.prompt += sep + self.company.name
+
+		if self.project:
+			self.prompt += sep + self.project.name
+
+		if self.task:
+			self.prompt += sep + self.task.name
+
+		if self.notebook:
+			self.prompt += sep + self.notebook.name
+
+		if self.page:
+			self.prompt += sep + self.page.name
+
+		self.prompt += ">" + Colors.ENDC +" "
+
+	def _is_connected(self, required=False):
+		"""
+		If `required` is True, print an error message stating that a connected
+		client is required.
+		"""
+		res = (self.client is not None)
+		if not res and required:
+			_err("A connected client is required. Use the 'login' (aka 'connect') command")
+		return res
+	
+	def _md_to_html(self, md):
+		"""
+		Convert markdown to html
+		"""
+		return markdown.markdown(md, extensions=["tables", "footnotes", "toc", ActLabCode()])
+	
+	def _editor_text(self, default_contents=""):
+		"""
+		Return the contents of a tempfile opened up in `$EDITOR` with the default_contents
+		being first added to the file.
+		"""
+		EDITOR = os.environ.get('EDITOR','vim') 
+
+		result = ""
+
+		with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as tmp:
+			tmp.write(default_contents)
+
+		subprocess.call([EDITOR, tmp.name])
+
+		with open(tmp.name, "r") as f:
+			result = f.read()
+		
+		return result
+	
+	def _process_value(self, value, possible_editor_contents=""):
+		"""
+		Process the value accepted from the user. Special characters are used:
+			* '<' - values starting with '<' read the contents of the file
+		"""
+		res = value
+
+		if value.startswith("<"):
+			value = value[1:]
+			if os.path.exists(value):
+				# be sure to use rb instead of just r, windows requires the b!
+				with codecs.open(value, "rb", encoding="utf-8") as f:
+					res = f.read()
+
+				# it's a markdown file, so generate html for it
+				if value.endswith(".md") and markdown is not None:
+					res = self._md_to_html(res)
+			else:
+				res = self._editor_text(default_contents=possible_editor_contents)
+				res = self._md_to_html(res)
+
+		return res
+	
+	def _deprocess_value(self, value):
+		"""
+		Mainly used for converting html to markdown. Put in a new function in case other
+		datatype deconversions are needed
+		"""
+		if value is None:
+			return value
+
+		# active collab makes _everything_ have <p> in it (pretty much)
+		if isinstance(value, basestring):
+			value = unicode(value.strip(codecs.BOM_UTF8), 'utf-8')
+
+			match = re.match(r'^.*<\w+>.*$', value)
+			# we found a tag? TODO think this through a bit more
+			if match is not None and html2text is not None:
+				value = html2text.html2text(value)
+
+		return value
+	
+	def _resolve_config(self, config_path, y=False):
+		"""
+		Resolve which config to use/create
+		"""
+		if config_path is None:
+			found_config = self._find_config()
+		else:
+			self.config = Config(config_path)
+			return
+
+		if found_config is not None:
+			if y:
+				answer = "y"
+			else:
+				answer = _prompt("Found actlab config file at '{}', use it? (y/n) ".format(found_config)).strip().lower()
+				while answer not in ["y", "n"]:
+					answer = _prompt("(y or n only) ").strip().lower()
+
+			if answer == "y":
+				_out("Using actlab config at '{}'".format(found_config))
+				self.config = Config(found_config)
+			else:
+				self.config = OPT_OUT_CONFIG
+
+		else:
+			_out("No config found, where should it be created?")
+			full_path = os.path.abspath(os.getcwd())
+			paths = []
+			while True:
+				paths.append(os.path.join(full_path, ".actlab"))
+				tmp = os.path.abspath(os.path.join(full_path, ".."))
+
+				# we've reached root
+				if tmp == full_path:
+					break
+				full_path = tmp
+
+			opt_out = "Do not create a config file"
+			paths.append(opt_out)
+
+			for x in xrange(len(paths)):
+				p = paths[x]
+				_out("    %2d - %s" % (x, p))
+
+			answer = int(_prompt("(enter an option number) "))
+			if paths[answer] == opt_out:
+				_out("No config file will be created")
+				self.config = OPT_OUT_CONFIG
+			else:
+				path = paths[answer]
+				_out("Creating config file at '{}'".format(path))
+				self.config = Config(path)
+
+	def _find_config(self):
+		"""
+		Find the root config file
+		"""
+		found = None
+		curr_dir = os.getcwd()
+
+		# watch out for windows drives!
+		while re.match(r'^([A-Za-z]:)?%s$' % os.sep, curr_dir) is None:
+			test = os.path.join(curr_dir, ".actlab")
+			if os.path.exists(test):
+				found = test
+				break
+			curr_dir = os.path.abspath(os.path.join(curr_dir, ".."))
+
+		return found
+	
+	# -------------------------------------
+
+	def precmd(self, line):
+		"""
+		Filter the line, used for nested sub-commands, login required, etc
+		"""
+		line = line.strip()
+
+		if line == "":
+			return "nop"
+
+		if line.startswith("!"):
+			line = line[1:]
+			return "shell " + line
+
+		cmd = line.split()[0]
+		if cmd not in ["help", "connect", "login", "quit", "q"] and not self._is_connected(True):
+			return "nop"
+		else:
+			return line
+	
+	# -------------------------------------
+
+	def do_login(self, arg):
+		"""
+		login <host>
+		connect <host>
+
+		Login to the Active Collab server at <host>. You will
+		be prompted for a username/password.
+		"""
+		host = arg.strip()
+		email = raw_input("Email: ")
+		password = getpass.getpass()
+
+		try:
+			self.client = ActLabClient(host=host, email=email, password=password)
+		except ConnectionError as e:
+			_err("Could not connect to host '{}'".format(host))
+		except InvalidCredentialsError as e:
+			_err("Invalid credentials")
+
+		self.config.authkey = self.client.get_key()
+		self.config.email = email
+		self.config.host = host
+
+	connect = do_login
+	
+	# -------------------------------------
+	
+	def do_nop(self, arg):
+		"""
+		Do nothing
+		"""
+	
+	def do_show(self, arg):
+		"""
+		show
+
+		Show the members of the current model
+		"""
+		if self.curr_model is None:
+			_err("There is no current model")
+			return
+
+		_out("{} '{}'".format(self.curr_model.__class__.__name__, self.curr_model.name))
+		_out("------------------------------------------------")
+		for k,v in self.curr_model.get_fields().iteritems():
+			use_ellipses = False
+			if type(v) is str and len(v) > 100:
+				use_ellipses = True
+				v = v[0:100]
+			v = json.dumps(v)
+			if use_ellipses:
+				v += "..."
+			_out("    %15s = %s" % (k, v))
+	
+	def _complete_fs(self, text, line, bg_idx, end_idx):
+		"""
+		Perform file path completion for commands
+		"""
+		mline = line.partition(' ')[2]
+		offs = len(mline) - len(text)
+		return [fp[offs:] for fp in glob.glob(mline+'*')]
+	
+	def do_pwd(self, arg):
+		"""
+		pwd
+
+		Print the current working directory
+		"""
+		_out(os.getcwd())
+	
+	complete_ls = _complete_fs
+	def do_ls(self, arg):
+		"""
+		ls <args>
+
+		List the contents of the directory. The same as '!ls <args>', except with file name completion
+		"""
+		self.do_shell("ls " + arg)
+	
+	complete_cd = _complete_fs
+	def do_cd(self, arg):
+		"""
+		cd <path>
+
+		Change the current working directory
+		"""
+		os.chdir(arg)
+		_ok(os.getcwd())
+
+	complete_attach = _complete_fs
+	def do_attach(self, arg):
+		"""
+		attach <file>
+
+		Attach the file to the current model. No separate save command is required.
+		"""
+		if self.curr_model is None:
+			_err("There is no current model")
+
+		if not os.path.exists(arg):
+			_err("File '{}' does not exist!".format(arg))
+			return
+
+		with open(arg, "rb") as f:
+			contents = f.read()
+
+		basename = os.path.basename(arg)
+
+		if isinstance(self.curr_model, pyactlab.models.Project):
+			self.client.add_file(self.curr_model, basename, contents)
+			_ok("added file '{}' ({} bytes) to project".format(basename, len(contents)))
+		else:
+			self.curr_model.attach(basename, contents)
+			_ok("attached file '{}' ({} bytes)".format(basename, len(contents)))
+
+	def do_set(self, arg):
+		"""
+		set <member> <value>
+
+		Set the member value. DOES NOT SAVE the model. You must explicitly
+		save the current model with the 'save' command.
+
+		If the value is prepended with "<", the contents of the filename following "<" is used
+		as the value
+		"""
+		if self.curr_model is None:
+			_err("There is no current model")
+			return
+
+		arg = arg.strip()
+		match = re.match(r'^([\w_0-9]+)\s+(.*$)', arg)
+		if match is None:
+			_err("You must supply both the member name and the value!")
+			return
+
+		member = match.group(1)
+		value = match.group(2)
+
+		fields = self.curr_model.get_fields()
+		if member not in fields:
+			_err("Member is not found in '{}' {}. Use 'show' command to show valid fields".format(
+				self.curr_model.name,
+				self.curr_model.__class__.__name__
+			))
+			return
+
+		try:
+			default = getattr(self.curr_model, member, "")
+			if default == "" or default is None:
+				default = "{} {}'s {}".format(
+					self.curr_model.name,
+					self.curr_model.__class__.__name__,
+					member
+				)
+			else:
+				default = self._deprocess_value(default)
+			value = self._process_value(value, default)
+		except ValueError as e:
+			_err(e.message)
+			return
+
+		setattr(self.curr_model, member, value)
+	
+	def do_save(self, arg):
+		"""
+		save
+
+		Save the current model
+		"""
+		if self.curr_model is None:
+			_err("No model is currently selected")
+			return
+
+		was_new = (self.curr_model.id is None)
+		self.curr_model.save()
+		_ok("saved!")
+
+		self._update()
+
+		cls = self.curr_model.__class__
+		if was_new:
+			if cls is pyactlab.models.Notebook:
+				answer = _prompt("Init local git-syncd files for notebook? (y/n) ").lower().strip()
+				if answer == "y":
+					self._create_notebook_folder(self.curr_model)
+
+			elif cls is pyactlab.models.Page:
+				answer = _prompt("Init local git-syncd files for notebook page? (y/n) ").lower().strip()
+				if answer == "y":
+					self._create_notebook_page_file(self.curr_model)
+	
+	def do_complete(self, arg):
+		"""
+		complete
+
+		Mark a project or task as being completed (must be the current model)
+		"""
+		if not self.curr_model:
+			_err("You must have a model selected (project or task)!")
+			return
+
+		if self.curr_model.__class__ not in [pyactlab.models.Task, pyactlab.models.Project]:
+			_err("Only Tasks and Projects can be marked as complete! Use the `use` command")
+			return
+
+		answer = _prompt("Are you sure you want to mark {} '{}' as complete? (y/n) ".format(
+			self.curr_model.__class__.__name__,
+			self.curr_model.name
+		))
+		while answer.strip().lower() not in ["y", "n"]:
+			answer = _prompt("(y or n only) ").strip().lower()
+
+		if "y" == answer:
+			self.curr_model.complete()
+			_ok("completed!")
+		else:
+			_ok("canceled")
+	
+	def do_comment(self, arg):
+		"""
+		comment (<msg> | <file)
+
+		Add a comment to the current model. Argument can either be the message, or a file to
+		use as the comment body (prepend the filename with "<", as with the 'set' command).
+		"""
+		if self.curr_model is None:
+			_err("Current model is not set. See the 'use' command")
+			return
+
+		msg = self._process_value(arg)
+		self.curr_model.comment(msg)
+
+		_ok("comment saved")
+
+	def do_screenshot(self, arg):
+		"""
+		screenshot <destfile>
+
+		Take a screenshot interactively and save it to the specified file
+		"""
+		dest = arg.replace(" ", "_").replace("/", "__").replace("\\", "__")
+		if not dest.lower().endswith(".png"):
+			dest += ".png"
+
+		root_dir = self.config.get_root()
+		pics_dir = os.path.join(root_dir, "pics")
+		if not os.path.exists(pics_dir):
+			os.mkdir(pics_dir)
+
+		image_path = os.path.join(pics_dir, dest)
+		if os.path.exists(image_path):
+			answer = _prompt("%s image already exists, overwrite? (y/n) " % dest).strip().lower()
+			while answer not in ["y", "n"]:
+				answer = _prompt("(y or n only) ").strip().lower()
+
+			if answer == "n":
+				_err("cancelled screenshot")
+				return
+
+		p = subprocess.Popen(["screencapture", "-i", "-t", "png", image_path])
+		stdout,stderr = p.communicate()
+		_ok("screenshot captured to 'pics/%s'" % dest)
+	
+	def do_screen(self, arg):
+		"""
+		screen(shot) <destfile>
+		"""
+		return self.do_screenshot(arg)
+	
+	def do_create(self, arg):
+		"""
+		create (task|notebook|page|local)
+
+		Create a notebook or task in the current project, or a page in the current notebook.
+
+		If local is specified and the current model is a notebook or a notebook page,
+		a local folder and markdown file will be created in the notes folder.
+		"""
+		if not self.project:
+			_err("You must have a project selected!")
+			return
+
+		arg = arg.strip()
+		if arg not in ["notebook", "page", "task", "local"]:
+			_err("Can only create tasks, notebooks, pages, or local!")
+			return
+
+		if "notebook" == arg:
+			new_notebook = pyactlab.models.Notebook(self.client)
+			new_notebook.name = "New Notebook (UNSAVED)"
+			new_notebook.project_id = self.project.id
+			self.notebook = new_notebook
+			self.curr_model = new_notebook
+			self._update_prompt()
+
+			self.do_show(None)
+			_ok("New temporary notebook created. Must be explicitly saved with the 'save' command.\nUse the 'set' command to set members of the notebook")
+		
+		elif "page" == arg:
+			if self.notebook is None:
+				_err("Must be using a notebook. Run 'list notebooks' and then 'use notebook <id>' first.")
+				return
+
+			new_page = pyactlab.models.Page(self.client)
+			new_page.name = "New Page (UNSAVED)"
+			new_page.project_id = self.project.id
+			new_page.notebook_id = self.notebook.id
+			self.page = new_page
+			self.curr_model = new_page
+			self._update_prompt()
+
+			self.do_show(None)
+			_ok("New temporary page created. Must be explicitly saved with the 'save' command.\nUse the 'set' command to set members of the page")
+
+		elif "task" == arg:
+			new_task = pyactlab.models.Task(self.client)
+			new_task.name = "New Task (UNSAVED)"
+			new_task.project_id = self.project.id
+			self.task = new_task
+			self.curr_model = new_task
+			self._update_prompt()
+
+			self.do_show(None)
+			_ok("New temporary task created. Must be explicitly saved with the 'save' command.\nUse the 'set' command to set members of the task")
+
+		elif "local" == arg:
+			cls = self.curr_model.__class__
+			if cls is pyactlab.models.Notebook:
+				self._create_notebook_folder(self.curr_model)
+			elif cls is pyactlab.models.Page:
+				self._create_notebook_page_file(self.curr_model)
+			else:
+				_err("Can only create local versions of notebooks and notebook pages!")
+				return
+	
+	def do_todo(self, arg):
+		"""
+		Create a todo task for yourself (will be assigned to you)
+
+		todo <todo title>
+
+		For more verbose task creation, use the `create task` command
+		"""
+		task_title = "TODO: " + arg
+		new_task = pyactlab.models.Task(self.client)
+		new_task.name = task_title
+		new_task.project_id = self.project.id
+		new_task.save()
+		_ok("todo saved!")
+
+	def do_list(self, arg):
+		"""
+		list (users|projects|companies|notebook|pages|attachments|tasks|comments)
+		"""
+		arg = arg.strip()
+		if arg not in ["users", "projects", "companies", "notebooks", "pages", "attachments", "tasks", "comments"]:
+			_err("item to list ({}) not recognized".format(arg))
+			return
+
+		if arg == "companies":
+			companies = self.client.get_companies()
+			for c in companies:
+				_out("%4d - %s" % (c.id, c.name))
+
+		elif arg == "users":
+			if self.company is None:
+				_err("Cannot list users without selecting a company. Do 'list companies' then 'use company <id>'")
+			users = self.client.get_users(self.company.id)
+			for u in users:
+				_out("%03d - %s %s" % (u.id, u.first_name, u.last_name))
+
+		elif arg == "projects":
+			projects = self.client.get_projects()
+			for p in projects:
+				_out("%4d - %s" % (p.id, p.name))
+
+		elif arg == "tasks":
+			if self.project is None:
+				_err("Cannot list tasks without selecting a project. Do 'list projects' then 'use project <id>'")
+				return
+
+			tasks = self.client.get_tasks(self.project.id)
+			for t in tasks:
+				# NOTE the use of task_id here instead of id
+				_out("%4d - %s" % (t.task_id, t.name))
+
+		elif arg == "notebooks":
+			if self.project is None:
+				_err("Cannot list notebooks without selecting a project. Do 'list projects', then 'use project <id>'")
+				return
+
+			notebooks = self.client.get_notebooks(self.project.id)
+			for n in notebooks:
+				_out("%4d - %s" % (n.id, n.name))
+
+		elif arg == "pages":
+			if self.notebook is None:
+				_err("Cannot list pages without selecting a notebook. Do 'list notebooks', then 'use notebook <id>'")
+				return
+
+			for p in self.notebook.subpages:
+				_out("%4d - %s" % (p.id, p.name))
+
+		elif arg == "attachments":
+			if not hasattr(self.curr_model, "attachments"):
+				_err("Cannot list attachments for current {} model".format(self.curr_model.__class__.__name__))
+				return
+
+			for a in self.curr_model.attachments:
+				_out("%4d - (%7d bytes) %s" % (a.id, a.size, a.name))
+
+		elif arg == "comments":
+			if self.curr_model is None:
+				_err("Must have a model currently selected")
+				return
+
+			comments = self.curr_model.get_comments()
+			for comment in comments:
+				attribution = "{:<4} - {} by {}".format(comment.id, comment.created_on, comment.creator)
+				comment_body = self._deprocess_value(comment.body)
+				_out(attribution)
+				_out("-" * len(attribution))
+				_out("\n".join(["    " + line for line in comment_body.split("\n")]))
+				_out("")
+	
+	def do_use(self, arg):
+		"""
+		use (comment|task|project|company|notebook|page) <id>
+
+		Setting the project will also set the company
+		"""
+		arg = arg.strip()
+		match = re.match(r'(\w+)\s+([-0-9]+)', arg)
+		if not match:
+			_err("Can only use company, project, notebook, or page")
+			return
+
+		item = match.group(1).strip().lower()
+		if item not in ["company", "project", "notebook", "page", "task"]:
+			_err("Can only use company, project, notebook, or page")
+			return
+
+		if item in ["notebook", "task"] and self.project is None:
+			_err("Cannot use a notebook without using a project first. Do 'list projects' then 'use project <id>'")
+			return
+
+		if "page" == item and self.notebook is None:
+			_err("Cannot use a page without using a notebook first. Do 'list notebooks' then 'use notebook <id>'")
+			return
+
+		id = int(match.group(2))
+
+		if self.config[item] != id:
+			self.do_drop(item)
+
+		self.config[item] = id
+
+		self._load_models()
+
+		if "company" == item:
+			self.curr_model = self.company
+		elif "project" == item:
+			self.curr_model = self.project
+		elif "notebook" == item:
+			self.task = None
+			self.config.task = None
+			self.curr_model = self.notebook
+		elif "task" == item:
+			self.config.page = None
+			self.page = None
+			self.config.notebook = None
+			self.notebook = None
+			self.curr_model = self.task
+		elif "page" == item:
+			self.curr_model = self.page
+
+		self._update_prompt()
+	
+	def do_drop(self, arg):
+		"""
+		drop (company|project|notebook|page|task)?
+
+		Drop the specified item (company|project|notebook|page|task). If no
+		item is specified, the most specific model will be dropped.
+		"""
+		item = arg.strip()
+		if item not in ["company", "project", "notebook", "page", "task", ""]:
+			_err("Can only drop a company, project, notebook, page, or task")
+			return
+
+		if "company" == item and self.company is not None:
+			self.project = None
+			self.config.project = None
+			self.company = None
+			self.config.company = None
+			self.notebook = None
+			self.config.notebook = None
+			self.page = None
+			self.config.page = None
+			self.task = None
+			self.config.task = None
+			self.curr_model = None
+
+		elif "project" == item and self.project is not None:
+			self.project = None
+			self.config.project = None
+			self.notebook = None
+			self.config.notebook = None
+			self.page = None
+			self.config.page = None
+			self.task = None
+			self.config.task = None
+			self.curr_model = self.company
+
+		elif "task" == item and self.task is not None:
+			self.task = None
+			self.config.task = None
+			self.curr_model = self.project
+
+		elif "notebook" == item and self.notebook is not None:
+			self.notebook = None
+			self.config.notebook = None
+			self.page = None
+			self.config.page = None
+			self.curr_model = self.project
+
+		elif "page" == item and self.page is not None:
+			self.page = None
+			self.config.page = None
+			self.curr_model = self.notebook
+
+		elif "" == item:
+			if self.page is not None:
+				self.do_drop("page")
+			elif self.notebook is not None:
+				self.do_drop("notebook")
+			elif self.task is not None:
+				self.do_drop("task")
+			elif self.project is not None:
+				self.do_drop("project")
+			elif self.company is not None:
+				self.do_drop("company")
+
+		self._update_prompt()
+
+	# -------------------------------------
+
+	def do_shell(self, arg):
+		"""
+		shell <cmds>
+		!<cmds>
+
+		Run the command in a bash shell and print the output
+		"""
+		p = subprocess.Popen(["bash", "-c", arg], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		stdout,stderr = p.communicate()
+		_out(stdout, raw=True)
+
+	def do_exit(self, arg):
+		"""
+		exit
+		q
+
+		Quit the shell
+		"""
+		exit()
+	do_q = do_exit
+
+def init_git(directory):
+	"""
+	Create an empty git repository in the directory
+	"""
+	git_path = distutils.spawn.find_executable("git")
+	if git_path is None:
+		_err("Could not locate git executable, will not create git repository")
+		return
+	
+	p = subprocess.Popen([git_path, "init", directory], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	stdout,stderr = p.communicate()
+	_out(stdout)
+
+	# copy the post_receive_hook to directory/.git/hooks/post-receive and
+	# make sure it's executable
+	# NOTE the use of realpath - works with symlinked actlab scripts
+	post_receive_hook = os.path.join(os.path.abspath(os.path.dirname(os.path.realpath(__file__))), "lib", "git_post_commit.py")
+	dst_hook = os.path.join(directory, ".git", "hooks", "post-commit")
+	shutil.copyfile(post_receive_hook, dst_hook)
+	st = os.stat(dst_hook)
+	os.chmod(dst_hook, st.st_mode | stat.S_IEXEC)
+
+	_out("\n".join([
+		"Added post-receive git hook",
+		"Files that begin with markup below will be pushed to active collab on commit",
+		"e.g",
+		"    $$actlab: { project: <id>, notebook: <id>, page: <id> }",
+		""
+	]))
+
+def init_directory(directory):
+	"""
+	Initialize the directory to be used with an ActiveCollab project
+	"""
+	shell = ActLabShell(os.path.join(directory, ".actlab"))
+	if not shell._is_connected():
+		shell.do_login(args.url)
+	if not shell.config.project:
+		shell.do_list("projects")
+		project_id = _prompt("Which project will you be using? (number) ")
+		shell.do_use("project {}".format(project_id))
+
+	if not os.path.exists("notes"):
+		os.mkdir("notes")
+	
+	init_git(directory)
+
+if __name__ == "__main__":
+		# drop into a shell
+		if len(sys.argv) == 1:
+			shell = ActLabShell()
+			shell.cmdloop()
+
+		parser = argparse.ArgumentParser(__file__, description="ActiveCollab python client")
+		parser.add_argument("--init", help="Initialize the current directory for working with an ActiveCollab project", action="store_true", default="False")
+		parser.add_argument("--url", "-u", help="Specify the url of the active collab server (E.g. http://127.0.0.1:8443)", type=str, default="http://127.0.0.1:8443")
+		
+		args = parser.parse_args()
+
+		# create 
+		if args.init:
+			directory = os.path.abspath(os.path.expanduser("."))
+			init_directory(directory)
