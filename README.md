@@ -22,7 +22,7 @@ Currently supported project objects/actions are:
 
 pyactlab can be installed directly from the master branch on github via `pip` with:
 
-	pip install https://github.com/d0c-s4vage/pyactlab@master
+	pip install git+https://github.com/d0c-s4vage/pyactlab@master
 
 ## Project Initialization
 
