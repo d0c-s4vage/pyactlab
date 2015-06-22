@@ -174,6 +174,9 @@ class Model(object):
 				else:
 					v = None
 
+                        if k in self.__fields and self.__fields[k] is not None and v is None:
+                            continue
+
 			self.__fields[k] = v
 
 		# add any non-defined fields to self.__fields

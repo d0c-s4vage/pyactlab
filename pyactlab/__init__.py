@@ -32,11 +32,12 @@ class ActLabClient(object):
 	_client_vendor = "PYACTLAB"
 
 	# TODO - static method to fetch API key from email/password
-	def __init__(self, host, key=None, email=None, password=None):
+	def __init__(self, host, key=None, email=None, password=None, base_path="/"):
 		"""
 		"""
 		self._host = host
-		self._api_path = "/public/api.php"
+                self._base_path = base_path
+		self._api_path = self._base_path + "/api.php"
 
 		if key is not None:
 			self._key = key
@@ -291,6 +292,8 @@ class ActLabClient(object):
 		"""
 		if "id" not in json:
 			match = re.match(r'^.*path_info=projects%2F[a-zA-Z0-9-]+%2Fnotebooks%2F\d+%2Fpages%2F(\d+)', json["permalink"])
+                        if match is None:
+                            match = re.match(r'^.*/projects/.*/notebooks/[0-9]+/pages/([0-9]+)', json["permalink"])
 			id = int(match.group(1))
 		else:
 			id = json["id"]

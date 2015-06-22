@@ -44,6 +44,6 @@ setup(
         os.path.join("bin", "actlab"),
     ],
     packages = [
-        "pyactlab", "pyactlab.lib"
+        "pyactlab", "pyactlab.misc"
     ]
 )

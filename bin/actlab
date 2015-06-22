@@ -33,6 +33,7 @@ import re
 import shutil
 import stat
 import subprocess
+import urlparse
 
 import readline
 import rlcompleter
@@ -92,10 +93,11 @@ class Config(object):
 		"project": None,
 		"authkey": None,
 		"host": None,
+		"base_path": None,
 		"email": None,
 		"notebook": None,
 		"task": None,
-		"page": None
+		"page": None,
 	}
 
 	def __init__(self, path):
@@ -286,7 +288,7 @@ class ActLabShell(cmd.Cmd):
 		Attempt to login using the credentials in the found config file
 		"""
 		try:
-			self.client = ActLabClient(host=self.config.host, key=self.config.authkey)
+			self.client = ActLabClient(host=self.config.host, key=self.config.authkey, base_path=self.config.base_path)
 		except ConnectionError as e:
 			_err("Could not connect to host '{}'".format(self.config.host))
 			self.client = None
@@ -585,11 +587,17 @@ class ActLabShell(cmd.Cmd):
 		be prompted for a username/password.
 		"""
 		host = arg.strip()
+		if not host.startswith("http://"):
+			host = "http://" + host
+
+		parts = urlparse.urlparse(host)
+		base_path = parts.path
+
 		email = raw_input("Email: ")
 		password = getpass.getpass()
 
 		try:
-			self.client = ActLabClient(host=host, email=email, password=password)
+			self.client = ActLabClient(host=host, email=email, password=password, base_path=base_path)
 		except ConnectionError as e:
 			_err("Could not connect to host '{}'".format(host))
 		except InvalidCredentialsError as e:
@@ -598,6 +606,7 @@ class ActLabShell(cmd.Cmd):
 		self.config.authkey = self.client.get_key()
 		self.config.email = email
 		self.config.host = host
+		self.config.base_path = base_path
 
 	connect = do_login
 	
@@ -835,7 +844,21 @@ class ActLabShell(cmd.Cmd):
 				_err("cancelled screenshot")
 				return
 
-		p = subprocess.Popen(["screencapture", "-i", "-t", "png", image_path])
+		os_args = {
+			"darwin"	: ["screencapture", "-i", "-t", "png"],
+			"linux"		: ["gnome-screenshot", "-a", "-f"]
+		}
+
+		platfrm = platform.system().lower()
+
+		if platfrm not in os_args:
+			_err("don't know which screenshot program for platform '%s'" % platfrm)
+			return
+
+		screen_args = os_args[platfrm]
+		screen_args.append(image_path)
+
+		p = subprocess.Popen(screen_args)
 		stdout,stderr = p.communicate()
 		_ok("screenshot captured to 'pics/%s'" % dest)
 	
@@ -1160,7 +1183,7 @@ def init_git(directory):
 	# copy the post_receive_hook to directory/.git/hooks/post-receive and
 	# make sure it's executable
 	# NOTE the use of realpath - works with symlinked actlab scripts
-    post_recive_hook = os.path.join(pyactlab.__file__, "misc", "git_post_commit.py")
+	post_receive_hook = os.path.join(os.path.dirname(pyactlab.__file__), "misc", "git_post_commit.py")
 	dst_hook = os.path.join(directory, ".git", "hooks", "post-commit")
 	shutil.copyfile(post_receive_hook, dst_hook)
 	st = os.stat(dst_hook)
@@ -1174,7 +1197,7 @@ def init_git(directory):
 		""
 	]))
 
-def init_directory(directory):
+def init_directory(args, directory):
 	"""
 	Initialize the directory to be used with an ActiveCollab project
 	"""
@@ -1188,6 +1211,9 @@ def init_directory(directory):
 
 	if not os.path.exists("notes"):
 		os.mkdir("notes")
+
+	if not os.path.exists("pics"):
+		os.mkdir("pics")
 	
 	init_git(directory)
 
@@ -1206,4 +1232,4 @@ if __name__ == "__main__":
 		# create 
 		if args.init:
 			directory = os.path.abspath(os.path.expanduser("."))
-			init_directory(directory)
+			init_directory(args, directory)
