@@ -34,6 +34,8 @@ directory structure for the Active Collab project:
 
 	actlab --init --url <URL+PATH+TO+ACTLAB>
 
+![project initialization](http://i.imgur.com/8Pcacd0.gif)
+
 ## API Models
 
 ### API Model Creating
