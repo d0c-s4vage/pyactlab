@@ -50,6 +50,8 @@ before saving it.
 
 New models must be saved via the `save` command.
 
+![api model creation](http://i.imgur.com/gZvBwWp.gif)
+
 ### API Model Editing
 
 `actlab` maintains the state of the current Active Collab API model being used. The
@@ -69,6 +71,8 @@ multiline editing.
 	set body <
 	save
 
+![api model editing](http://i.imgur.com/n7p0spt.gif)
+
 This also works well with comments:
 
 	comment <
@@ -80,6 +84,8 @@ A project's models can be listed using the `list` command:
 	list notebooks
 	list tasks
 	list comments
+
+![api model listing](http://i.imgur.com/6r2yjJF.gif)
 
 ### API Model Selection
 
@@ -100,6 +106,8 @@ be selected, and then the page within the notebook may be selected.
 In order to navigate out from under a hierarchy of models, use the `drop` command
 to go up a level.
 
+![api model navigation](http://i.imgur.com/oheMmJH.gif)
+
 ## Notebooks
 
 `actlab` can create notebooks that are locally git-synced with the notebook's description in
@@ -110,6 +118,8 @@ the `notes` directory:
 	save
 	y
 
+![notebook creation](http://i.imgur.com/pVdcw9F.gif)
+
 ## Pages
 
 `actlab` can create pages that a locally git-synced with a file in the `notes` directory.
@@ -118,6 +128,8 @@ the `notes` directory:
 	set name SOME PAGE NAME
 	save
 	y
+
+![page creation](http://i.imgur.com/1LmkTY7.gif)
 
 ## Tasks
 
@@ -132,6 +144,10 @@ the `notes` directory:
 have "TODO" prefixed to the tasks name:
 
 	todo check this out later
+
+![task todo and complete](http://i.imgur.com/qmuvlmf.gif)
+
+Tasks can be marked as completed via the `complete` command.
 
 ## Attachments
 
