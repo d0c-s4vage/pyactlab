@@ -1,3 +1,11 @@
+# NOTE!!!
+# NOTE!!!
+
+This is branch is in the process of being updated to work with ActiveCollab v5.X
+
+# NOTE!!!
+# NOTE!!!
+
 # pyactlab
 
 pyactlab is an Active Collab project management system. It utilizes the Active
