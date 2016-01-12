@@ -777,7 +777,7 @@ class ActLabClient(object):
             headers["X-Angie-AuthApiToken"] = self._key
 
         try:
-            res = requests.get(url, headers=headers)
+            res = requests.get(url, headers=headers, verify=False)
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError()
 
@@ -824,7 +824,7 @@ class ActLabClient(object):
                 post_params = json.dumps(post_params)
                 headers["Content-Type"] = "application/json"
 
-            res = requests.put(url, data=post_params, headers=headers, files=files)
+            res = requests.put(url, data=post_params, headers=headers, files=files, verify=False)
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError()
 
@@ -853,7 +853,7 @@ class ActLabClient(object):
                 post_params = json.dumps(post_params)
                 headers["Content-Type"] = "application/json"
 
-            res = requests.post(url, data=post_params, headers=headers, files=files)
+            res = requests.post(url, data=post_params, headers=headers, files=files, verify=False)
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError()
 
