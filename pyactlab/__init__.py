@@ -286,30 +286,30 @@ class ActLabClient(object):
         res = self._post_cmd("projects/{pid}/tasks/{tid}/complete".format(pid=task.project_id, tid=task.task_id), **fields)
         return res
 
-    def new_attachment(self, owner_model, filepath_or_data, filename=None, mime_type="application/octet-stream"):
+    def new_attachment(self, owner_model, filepath=None, data=None, filename=None, mime_type="application/octet-stream"):
         """I believe this _ONLY_ works on tasks, unlike the old version of active collab
         where everything could have an attachment.
         """
-        if not os.path.exists(filepath_or_data) and filename is None:
+        if filepath is None and data is None:
             raise InvalidAttachment("Could not identify file (data or path both don't make sense)")
        
-        if os.path.exists(filepath_or_data):
-            with open(filepath_or_data, "rb") as f:
+        if filepath is not None:
+            if not os.path.exists(filepath):
+                raise InvalidAttachment("Path does not exist at '{}'".format(filepath))
+
+            with open(filepath, "rb") as f:
                 file_data = f.read()
-            filename = os.path.basename(filepath_or_data)
+            filename = os.path.basename(filepath)
         else:
-            file_data = filepath_or_data
+            file_data = data
 
         uploaded_file = self._upload_file(file_data=file_data, filename=filename)
-        import pdb; pdb.set_trace()
 
-        import pdb; pdb.set_trace()
         res = self._put_api(owner_model.url_path, post_params={
             "attach_uploaded_files": [
                 uploaded_file
             ]
         })
-        import pdb; pdb.set_trace()
 
         owner_model._create_fields(res["single"])
 
