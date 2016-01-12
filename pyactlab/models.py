@@ -273,8 +273,8 @@ class Taskable(object):
         return self._client.new_task(self, **params)
 
 class Attachable(object):
-    def attach_file(self, file_path=None, data=None, filename=None):
-        self._client.new_attachment(self, file_path=None, data=None, filename=filename)
+    def attach_file(self, filepath=None, data=None, filename=None):
+        self._client.new_attachment(self, filepath=filepath, data=data, filename=filename)
 
 class Project(Model,Taskable,Attachable):
     method = "project"
