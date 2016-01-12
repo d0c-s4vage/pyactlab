@@ -48,6 +48,7 @@ class ActLabClient(object):
             self._base_path += "/"
         self._api_path = self._base_path + "api/v1"
 
+        self._key = None
         if key is not None:
             self._key = key
             self._test_key()
