@@ -362,7 +362,6 @@ class TaskLabel(Model):
     }
 
 class Task(Model, Taskable, Attachable):
-    id_field = "task_id"
     method = "task"
     fields = {
         "name":             unicode,    # (string) - The Task name is a required field when creating a Task.
@@ -371,8 +370,9 @@ class Task(Model, Taskable, Attachable):
         "is_important":     bool,
         "due_on":           int,
         "labels":           list,
-
+        "task_list_id":     int,
         "project_id":       int,
+
         "visibility":        int,    # (integer) - Object visibility. 0 is private and 1 is the value of normal visibility.
         "category_id":        int,    # (integer) - Object category.
         "label_id":            int,    # (integer) - Object label.

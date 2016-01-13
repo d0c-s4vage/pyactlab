@@ -208,7 +208,8 @@ class ActLabClient(object):
         """
         Fetch a list of all tasks in a project
         """
-        res = self._get_cmd("projects/{pid}/tasks".format(pid=project_id))
+
+        res = self._get_api("projects/{pid}/tasks".format(pid=project_id))
         if res is None:
             return []
 
@@ -216,10 +217,10 @@ class ActLabClient(object):
             return res
 
         tasks = []
-        for t in res:
+        for t in res["tasks"]:
             if 1 == t["is_completed"] and not inc_completed:
                 continue
-            task = self._create_task(project_id, t)
+            task = models.Task.create(self, t)
             tasks.append(task)
         return tasks
 
@@ -251,11 +252,27 @@ class ActLabClient(object):
         task_lists = [models.TaskList.create(self, t) for t in res]
         return task_lists
 
+    def get_task_list(self, project_id, task_list_id, raw=False):
+        """Return the specified task list or None if not found
+        """
+        res = self._get_api("projects/{pid}/task-lists/{tid}".format(
+            pid     = project_id,
+            tid     = task_list_id
+        ))
+        if res is None:
+            return None
+
+        if raw:
+            return res
+
+        task_list = models.TaskList.create(self, res)
+        return task_list
+
     def get_task(self, project_id, task_id, raw=False):
         """
         Return the task in the project denoted by `project_id` and specified by `task_id`
         """
-        res = self._get_cmd("projects/{pid}/tasks/{tid}".format(pid=project_id, tid=task_id))
+        res = self._get_api("projects/{pid}/tasks/{tid}".format(pid=project_id, tid=task_id))
 
         if raw:
             return res
