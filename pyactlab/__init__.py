@@ -216,6 +216,23 @@ class ActLabClient(object):
         )
         return models.Project.create(self, res)
 
+    # NOTES -------------------------
+
+    def get_notes(self, project_id, raw=False):
+        """
+        Return a list of notes in the project
+        """
+        res = self._get_api("projects/{}/notes".format(project_id))
+
+        if res is None:
+            return None
+
+        if raw:
+            return res
+
+        notes = [models.Note.create(self, n) for n in res]
+        return notes
+
     # TASKS -------------------------
 
     def _create_task(self, project_id, json):

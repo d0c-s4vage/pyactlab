@@ -309,6 +309,16 @@ class Project(Model,Taskable,Attachable):
 #        "label_id":        int        # (integer) - The ID of the Project Label.
     }
 
+class Note(Model):
+    fields = {
+        "name":             unicode,
+        "body":             unicode,
+        "attachments":      list,
+        "project_id":       int,
+        "body_plain_text":  unicode,
+        "note_id":          int,
+    }
+
 class Notebook(Model):
     method = "notebook"
     fields = {
