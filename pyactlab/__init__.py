@@ -86,6 +86,29 @@ class ActLabClient(object):
         return models.Company.create(self, res)
 
     # USERS -------------------------
+
+    def new_user(self, email, password, company_id, user_type="Member",  permissions=None, raw=False):
+        """
+        Create a new user. Possible permissions are: can_manage_settings, can_manage_projects, can_manage_finances
+        """
+        if permissions is None:
+            permissions = []
+
+        res = self._post_api("users", post_params={
+            "type"          : user_type,
+            "company_id"    : company_id,
+            "password"      : password,
+            "email"         : email,
+        })
+
+        if res is None:
+            raise ActLabError("Could not create new user")
+
+        if raw:
+            return res
+
+        user = models.User.create(self, res["single"])
+        return user
     
     def get_users(self, raw=False):
         """
