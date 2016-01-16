@@ -314,10 +314,13 @@ class ActLabClient(object):
         """
         res = self._get_api("projects/{pid}/tasks/{tid}".format(pid=project_id, tid=task_id))
 
+        if res is None:
+            return None
+
         if raw:
             return res
 
-        return self._create_task(project_id, res)
+        return models.Task.create(self, res["single"])
     
     def save_task(self, task, **extra):
         """
@@ -327,13 +330,12 @@ class ActLabClient(object):
             raise ActLabError("task.project_id must be set!")
 
         fields = dict(task.get_fields().items() + extra.items())
-        fields = self._memberify_dict(fields, "task")
         fields["submitted"] = "submitted"
-        res = self._post_cmd(
-            "projects/{pid}/tasks/{tid}/edit".format(pid=task.project_id, tid=task.task_id),
-            **fields
+        res = self._put_api(
+            "projects/{pid}/tasks/{tid}".format(pid=task.project_id, tid=task.id),
+            post_params=fields
         )
-        return res
+        return res["single"]
     
     def complete_task(self, task):
         """
@@ -693,13 +695,9 @@ class ActLabClient(object):
         """
         Add a comment to the model
         """
-        cmd = self._get_model_url(model) + "/comments/add"
-        fields = {
-            "comment[body]": msg,
-            "submitted": "submitted"
-        }
-
-        res = self._post_cmd(cmd, **fields)
+        res = self._post_api("comments/{}/{}".format(model.__class__.__name__.lower(), model.id), post_params={
+            "body": msg
+        })
 
         if raw:
             return res

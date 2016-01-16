@@ -240,12 +240,13 @@ class User(Model):
     method = "user"
     needs_project_id = False
     fields = {
-        "email":        unicode,    # (string) - The user's email address. The value of this field is required when a User Account is created and must be properly formatted. There can be only one user associated with any given email address in the system.
-        "company_id":   int,
-        "created_on":   int,        # time.time utc timestamp
-        "first_name":   unicode,    # (string) - The name of the user
-        "last_name":    unicode,    # (string) - The last name of that user
-        "phone":        unicode,
+        "email":            unicode,    # (string) - The user's email address. The value of this field is required when a User Account is created and must be properly formatted. There can be only one user associated with any given email address in the system.
+        "company_id":       int,
+        "created_on":       int,        # time.time utc timestamp
+        "first_name":       unicode,    # (string) - The name of the user
+        "last_name":        unicode,    # (string) - The last name of that user
+        "display_name":     unicode,
+        "phone":            unicode,
     }
 
 class Company(Model):
@@ -262,6 +263,12 @@ class Company(Model):
     sub_models = {
         "users": "User"
     }
+
+class Commentable(object):
+    def add_comment(self, comment):
+        """Add a comment to this model
+        """
+        return self._client.add_comment(self, comment)
 
 class Taskable(object):
     def new_task(self, **params):
@@ -371,7 +378,7 @@ class TaskLabel(Model):
         "position":     int,
     }
 
-class Task(Model, Taskable, Attachable):
+class Task(Model, Taskable, Attachable, Commentable):
     method = "task"
     fields = {
         "name":             unicode,    # (string) - The Task name is a required field when creating a Task.
@@ -423,7 +430,7 @@ class Attachment(Model):
 class Comment(Model):
     method = "comment"
     fields = {
-        "body":                unicode,    # (string) - Comment text
+        "body":                 unicode,    # (string) - Comment text
     }
 
 class File(Model):
