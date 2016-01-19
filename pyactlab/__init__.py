@@ -244,12 +244,15 @@ class ActLabClient(object):
         t.project_id = project_id
         return t
 
-    def get_tasks(self, project_id, raw=False, inc_completed=False):
+    def get_tasks(self, project_id, raw=False, archived=False):
         """
         Fetch a list of all tasks in a project
         """
+        url = "projects/{pid}/tasks".format(pid=project_id)
+        if archived:
+            url += "/archive"
 
-        res = self._get_api("projects/{pid}/tasks".format(pid=project_id))
+        res = self._get_api(url)
         if res is None:
             return []
 
@@ -257,9 +260,12 @@ class ActLabClient(object):
             return res
 
         tasks = []
-        for t in res["tasks"]:
-            if 1 == t["is_completed"] and not inc_completed:
-                continue
+        if archived:
+            tasks_json = res
+        else:
+            tasks_json = res["tasks"]
+
+        for t in tasks_json:
             task = models.Task.create(self, t)
             tasks.append(task)
         return tasks
@@ -344,6 +350,12 @@ class ActLabClient(object):
         fields = {"submitted": "submitted"}
         res = self._post_cmd("projects/{pid}/tasks/{tid}/complete".format(pid=task.project_id, tid=task.task_id), **fields)
         return res
+
+    def complete(self, model):
+        res = self._put_api("complete/{}/{}".format(model.__class__.__name__.lower(), model.id))
+
+    def reopen(self, model):
+        res = self._put_api("open/{}/{}".format(model.__class__.__name__.lower(), model.id))
 
     def new_attachment(self, owner_model, filepath=None, data=None, filename=None, mime_type="application/octet-stream"):
         """I believe this _ONLY_ works on tasks, unlike the old version of active collab

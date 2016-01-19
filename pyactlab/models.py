@@ -83,13 +83,6 @@ class Model(object):
 
         res = getattr(self._client, "get_" + self.method)(*args, raw=True)
         self._create_fields(res)
-
-    def complete(self):
-        """
-        Complete the model (project/task-specific)
-        """
-        res = getattr(self._client, "complete_" + self.method)(self)
-        self._create_fields(res)
     
     def comment(self, msg):
         """
@@ -270,6 +263,17 @@ class Commentable(object):
         """
         return self._client.add_comment(self, comment)
 
+class Completable(object):
+    def complete(self):
+        """Complete the current model
+        """
+        self._client.complete(self)
+
+    def reopen(self):
+        """Reopen the closed model
+        """
+        self._client.reopen(self)
+
 class Taskable(object):
     def new_task(self, **params):
         """Add the task to this model
@@ -378,7 +382,7 @@ class TaskLabel(Model):
         "position":     int,
     }
 
-class Task(Model, Taskable, Attachable, Commentable):
+class Task(Model, Taskable, Attachable, Commentable, Completable):
     method = "task"
     fields = {
         "name":             unicode,    # (string) - The Task name is a required field when creating a Task.
@@ -389,6 +393,7 @@ class Task(Model, Taskable, Attachable, Commentable):
         "labels":           list,
         "task_list_id":     int,
         "project_id":       int,
+        "is_completed":     bool,
 
         "visibility":        int,    # (integer) - Object visibility. 0 is private and 1 is the value of normal visibility.
         "category_id":        int,    # (integer) - Object category.
