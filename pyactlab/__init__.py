@@ -163,12 +163,12 @@ class ActLabClient(object):
         """
         Return a single project by id
         """
-        res = self._get_cmd("projects/" + str(project_id))
+        res = self._get_api("projects/" + str(project_id))
 
         if raw:
             return res
 
-        return models.Project.create(self, res)
+        return models.Project.create(self, res["single"])
     
     def save_project(self, project, **extra):
         """
@@ -311,7 +311,7 @@ class ActLabClient(object):
         if raw:
             return res
 
-        task_list = models.TaskList.create(self, res)
+        task_list = models.TaskList.create(self, res["single"])
         return task_list
 
     def get_task(self, project_id, task_id, raw=False):
