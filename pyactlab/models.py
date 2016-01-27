@@ -409,6 +409,19 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
         "created_by_email":    unicode    # (string) - Used for anonymous users.
     }
 
+    @classmethod
+    def create(cls, client, fields, **kwargs):
+        if "labels" in fields and len(fields["labels"]) > 0:
+            real_labels = []
+            for label in fields["labels"]:
+                if isinstance(label, basestring):
+                    real_labels.append(label)
+                elif isinstance(label, dict) and "name" in label:
+                    real_labels.append(label["name"])
+            fields["labels"] = real_labels
+        return cls(client, fields, **kwargs)
+        
+
 # TODO subtasks
 # body (text) - The Subtask name is required field when creating a new Subtask.
 # assignee (integer) - The person assigned to the object.
