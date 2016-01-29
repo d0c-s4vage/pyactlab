@@ -327,6 +327,7 @@ class Note(Model):
         "attachments":      list,
         "project_id":       int,
         "body_plain_text":  unicode,
+        "body_formatted":   unicode,
         "note_id":          int,
     }
 
@@ -445,10 +446,16 @@ class Attachment(Model):
     def download(self):
         return self._client.download_attachment(self.permalink)
     
-class Comment(Model):
-    method = "comment"
+class Comment(Model, Attachable):
+    method = "comments"
     fields = {
-        "body":                 unicode,    # (string) - Comment text
+        "body":             unicode,    # (string) - Comment text
+        "body_plaintext":   unicode,
+        "body_formatted":   unicode,
+        "attachments":      list,
+        "parent_type":      unicode,
+        "parent_id":        int,
+
     }
 
 class File(Model):

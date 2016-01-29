@@ -684,13 +684,11 @@ class ActLabClient(object):
         res.creator = json["created_by"]["name"]
         res.created_on = json["created_on"]["formatted"]
     
-    def get_comments(self, model, raw=False):
+    def get_comments(self, task_id, raw=False):
         """
         Return a list of comments attached to the model
         """
-        cmd = self._get_model_url(model) + "/comments"
-
-        res = self._get_cmd(cmd)
+        res = self._get_api("comments/task/{}".format(task_id))
         if res is None:
             return []
 
@@ -702,6 +700,35 @@ class ActLabClient(object):
             comments.append(models.Comment.create(self, c))
 
         return comments
+
+    def get_comment(self, comment_id, raw=False):
+        """
+        Fetch a single comment
+        """
+        res = self._get_api("comments/{}".format(comment_id))
+        if res is None:
+            return None
+
+        if raw:
+            return res
+
+        return models.Comment.create(self, res["single"])
+
+    def save_comment(self, comment, **extra):
+        """
+        Save the existing comment
+        """
+        if comment.id is None:
+            raise ActLabError("comment.id must be set!")
+
+        fields = dict(comment.get_fields().items() + extra.items())
+        fields["submitted"] = "submitted"
+        res = self._put_api(
+            "comments/{}".format(comment.id),
+            post_params=fields
+        )
+
+        return res["single"]
     
     def add_comment(self, model, msg, raw=False):
         """
