@@ -163,7 +163,7 @@ class ActLabClient(object):
         """
         Return a single project by id
         """
-        res = self._get_cmd("projects/" + str(project_id))
+        res = self._get_api("projects/" + str(project_id))
 
         if raw:
             return res
@@ -714,7 +714,7 @@ class ActLabClient(object):
         if raw:
             return res
 
-        return models.Comment.create(self, res)
+        return models.Comment.create(self, res["single"])
 
     # ---------------------
     # ---------------------

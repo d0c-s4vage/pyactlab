@@ -432,7 +432,7 @@ class Attachment(Model):
     def download(self):
         return self._client.download_attachment(self.permalink)
     
-class Comment(Model):
+class Comment(Model,Attachable):
     method = "comment"
     fields = {
         "body":                 unicode,    # (string) - Comment text
