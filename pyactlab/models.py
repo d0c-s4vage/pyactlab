@@ -410,17 +410,16 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
         "created_by_email":    unicode    # (string) - Used for anonymous users.
     }
 
-    @classmethod
-    def create(cls, client, fields, **kwargs):
-        if "labels" in fields and len(fields["labels"]) > 0:
+    def _create_fields(self, init):
+        if "labels" in init and len(init["labels"]) > 0:
             real_labels = []
-            for label in fields["labels"]:
+            for label in init["labels"]:
                 if isinstance(label, basestring):
                     real_labels.append(label)
                 elif isinstance(label, dict) and "name" in label:
                     real_labels.append(label["name"])
-            fields["labels"] = real_labels
-        return cls(client, fields, **kwargs)
+            init["labels"] = real_labels
+        return super(Task, self)._create_fields(init)
         
 
 # TODO subtasks
