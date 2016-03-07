@@ -76,7 +76,7 @@ class ActLabClient(object):
 
         companies = [models.Company.create(self, c) for c in res]
         return companies
-    
+
     def get_company(self, company_id, raw=False):
         res = self._get_cmd("people/{}".format(company_id))
 
@@ -109,7 +109,7 @@ class ActLabClient(object):
 
         user = models.User.create(self, res["single"])
         return user
-    
+
     def get_users(self, raw=False):
         """
         Fetch all users in company specified by company_id
@@ -121,7 +121,7 @@ class ActLabClient(object):
 
         users = [models.User.create(self, u) for u in res]
         return users
-    
+
     def get_user(self, company_id, user_id, raw=False):
         """
         Fetch the user using the company_id and user_id
@@ -136,7 +136,7 @@ class ActLabClient(object):
 
         user = models.User.create(self, res)
         return user
-    
+
     def save_user(self, user):
         """
         Save the user
@@ -158,7 +158,7 @@ class ActLabClient(object):
 
         projects = [models.Project.create(self, p) for p in res]
         return projects
-    
+
     def get_project(self, project_id, raw=False):
         """
         Return a single project by id
@@ -169,7 +169,7 @@ class ActLabClient(object):
             return res
 
         return models.Project.create(self, res["single"])
-    
+
     def save_project(self, project, **extra):
         """
         Save the project
@@ -182,7 +182,7 @@ class ActLabClient(object):
             **fields
         )
         return res
-    
+
     def complete_project(self, project):
         """
         Mark the project as being completed. Returns raw json (for use by models)
@@ -190,7 +190,7 @@ class ActLabClient(object):
         fields = {"submitted": "submitted"}
         res = self._post_cmd("projects/{pid}/complete".format(pid=project.id), **fields)
         return res
-    
+
     def new_project(self, **params):
         """
         Create a new project with the specified param values
@@ -327,7 +327,7 @@ class ActLabClient(object):
             return res
 
         return models.Task.create(self, res["single"])
-    
+
     def save_task(self, task, **extra):
         """
         Save the existing task
@@ -342,7 +342,7 @@ class ActLabClient(object):
             post_params=fields
         )
         return res["single"]
-    
+
     def complete_task(self, task):
         """
         Mark the task as being completed. Returns raw json (for use by models)
@@ -354,6 +354,9 @@ class ActLabClient(object):
     def complete(self, model):
         res = self._put_api("complete/{}/{}".format(model.__class__.__name__.lower(), model.id))
 
+    def trash(self, model):
+        res = self._put_api("move-to-trash/{}/{}".format(model.__class__.__name__.lower(), model.id))
+
     def reopen(self, model):
         res = self._put_api("open/{}/{}".format(model.__class__.__name__.lower(), model.id))
 
@@ -363,7 +366,7 @@ class ActLabClient(object):
         """
         if filepath is None and data is None:
             raise InvalidAttachment("Could not identify file (data or path both don't make sense)")
-       
+
         if filepath is not None:
             if not os.path.exists(filepath):
                 raise InvalidAttachment("Path does not exist at '{}'".format(filepath))
@@ -402,7 +405,7 @@ class ActLabClient(object):
 
         res = self._post_api(base_path, post_params=params)
         return models.Task.create(self, res["single"])
-    
+
     def new_task_OLD(self, project_id, **params):
         """
         Create a new task in the project denoted by `project_id` with the
@@ -433,7 +436,7 @@ class ActLabClient(object):
             **fields
         )
         return self._create_task(project_id, res)
-    
+
     # NOTEBOOKS -------------------------
 
     # NOTE this is done automatically in the Model in the _create_fields method!
@@ -514,7 +517,7 @@ class ActLabClient(object):
             return res
 
         return self._create_notebook(project_id, res)
-    
+
     def save_notebook(self, notebook, **extra):
         """
         Save the existing notebook
@@ -530,7 +533,7 @@ class ActLabClient(object):
             **fields
         )
         return res
-    
+
     def new_notebook(self, project_id, **params):
         """
         Create a new notebook in the project denoted by `project_id` with the
@@ -551,7 +554,7 @@ class ActLabClient(object):
             **fields
         )
         return models.Notebook.create(self, res)
-        
+
 
     # PAGES -------------------------
 
@@ -567,7 +570,7 @@ class ActLabClient(object):
             # return []
         # pages = [models.Page.create(self, p) for p in res]
         # return pages
-    
+
     def get_notebook_page(self, project_id, page_id, notebook_id=0, raw=False):
         """
         Return the notebook in the project denoted by `project_id` and specified by `notebook_id`
@@ -587,7 +590,7 @@ class ActLabClient(object):
         page = self._create_page(project_id, res["notebook"]["id"], res)
         page.project_id = project_id
         return page
-    
+
     def save_notebook_page(self, notebook_page, **extra):
         """"
         Save the notebook page
@@ -609,7 +612,7 @@ class ActLabClient(object):
             **fields
         )
         return res
-    
+
     def new_notebook_page(self, project_id, notebook_id, **params):
         """
         Create a new notebook page
@@ -617,7 +620,7 @@ class ActLabClient(object):
         param options:
             "name":            None,    # (string) - The Notebook Page title is a required value.
             "body":            None,    # (text) - The Notebook Page description.
-            "parent_id":    None    # (integer) - The ID of the parent Page. Leave blank to add the page at the 
+            "parent_id":    None    # (integer) - The ID of the parent Page. Leave blank to add the page at the
         """
         page = models.Page(self, params)
         fields = self._memberify_dict(page.get_fields(), "notebook_page")
@@ -631,7 +634,7 @@ class ActLabClient(object):
             **fields
         )
         return models.Page.create(self, res)
-    
+
     # MISC -------------------------
 
     def download_attachment(self, url):
@@ -644,13 +647,13 @@ class ActLabClient(object):
             return res.content
         else:
             raise ActLabError("Could not download attachment at {}".format(url))
-    
+
     def add_attachment(self, model, name, data, **extra):
         """
         Add an attachment to the model.
         """
         model.save(**{"attachments": {"attachment_0": (name, data)}})
-    
+
     def add_file(self, project, name, data, **extra):
         """
         Add a file to the project
@@ -668,14 +671,14 @@ class ActLabClient(object):
         res = self._post_cmd(cmd, **fields)
 
         return models.File.create(self, res)
-    
+
     def download_file(self, file_obj):
         """
         Download the file, given a file model
         """
         raise NotImplementedError("File downloading is not yet implemented")
         #cmd = self._get_model_url(file_obj.project_id) + "/files/" + file_obj.id
-    
+
     def _create_comment(self, json):
         """
         Create a comment from json
@@ -683,7 +686,7 @@ class ActLabClient(object):
         res = models.Comment.create(self, json)
         res.creator = json["created_by"]["name"]
         res.created_on = json["created_on"]["formatted"]
-    
+
     def get_comments(self, task_id, raw=False):
         """
         Return a list of comments attached to the model
@@ -729,7 +732,7 @@ class ActLabClient(object):
         )
 
         return res["single"]
-    
+
     def add_comment(self, model, msg, raw=False):
         """
         Add a comment to the model
@@ -813,13 +816,13 @@ class ActLabClient(object):
         are not to be url-escaped. `safe` defaults to ""
         """
         return urllib.quote(string, safe)
-    
+
     def _dict_to_query(self, d):
         """
         convert a dictionary to a query-string, url-escaping the values
         """
         return "&".join("{k}={v}".format(k=k, v=self._esc(v)) for k,v in d.iteritems())
-    
+
     def _auto_convert(self, data):
         try:
             return json.loads(data)
@@ -841,13 +844,13 @@ class ActLabClient(object):
             page = page[1:]
         while page.endswith("/"):
             page = page[:-1]
-            
+
         url = self._host + self._api_path + "/" + page
         if len(params) > 0:
             params_str = self._dict_to_query(params)
             url += "?" + params_str
         return url
-    
+
     def _api_url_OLD(self, **params):
         """
         Build an api url using `self._host`, `self._api_path`, and provided args
@@ -879,7 +882,7 @@ class ActLabClient(object):
             return self._auto_convert(res.content)
         else:
             return None
-    
+
     def _get_api_OLD(self, query_params=None):
         """
         Normal arguments are path parts, kwargs are the GET param key/value pairs
@@ -926,7 +929,7 @@ class ActLabClient(object):
             return self._auto_convert(res.content)
         else:
             return None
-        
+
     def _post_api(self, page, query_params=None, post_params=None):
         if query_params is None: query_params = {}
         if post_params is None: post_params = {}
@@ -955,7 +958,7 @@ class ActLabClient(object):
             return self._auto_convert(res.content)
         else:
             return None
-    
+
     def _post_api_OLD(self, query_params=None, post_params=None):
         """
         Normal arguments are path parts, kwargs are the POST param key/value pairs
@@ -979,17 +982,17 @@ class ActLabClient(object):
             return self._auto_convert(res.content)
         else:
             return None
-    
+
     def _make_cmd_params(self, cmd):
         return {
             "path_info": cmd,
             "auth_api_token": self._key,
             "format": "json"
         }
-    
+
     def _post_cmd(self, cmd, **params):
         return self._post_api(self._make_cmd_params(cmd), params)
-    
+
     def _get_cmd(self, cmd, **params):
         url_params = self._make_cmd_params(cmd)
         url_params = dict(url_params.items() + params.items())
@@ -1001,7 +1004,7 @@ class ActLabClient(object):
         """
         # let any errors bubble up
         self.get_companies(raw=True)
-    
+
     def _get_api_key(self, email, password):
         """Fetch the api key for this email/password combination
 
@@ -1026,7 +1029,7 @@ class ActLabClient(object):
         Fetch the api key using the provided `email` and `password`.
 
         https://activecollab.com/help/books/api/authentication.html
-        """ 
+        """
         res = self._post_api(post_params={
             "api_subscription[email]": email,
             "api_subscription[password]": password,
