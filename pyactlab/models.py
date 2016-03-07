@@ -16,7 +16,7 @@ class Model(object):
         """
         res = cls(client, fields, **kwargs)
         return res
-    
+
     # ---------------------------------
     # PUBLIC
     # ---------------------------------
@@ -47,13 +47,13 @@ class Model(object):
                 setattr(self, k, v)
 
         self._create_fields(init=fields)
-    
+
     def get_fields(self):
         """
         Return a copy of this model's fields dict
         """
         return self.__fields.copy()
-    
+
     def save(self, **with_extra):
         """
         Save the model to active collab. Return false if the model could not be saved
@@ -63,7 +63,7 @@ class Model(object):
             self._create_fields(new_fields)
             return True
         return False
-    
+
     def refresh(self):
         """
         Refresh the model with what is currently found in active collab
@@ -83,25 +83,28 @@ class Model(object):
 
         res = getattr(self._client, "get_" + self.method)(*args, raw=True)
         self._create_fields(res)
-    
+
     def comment(self, msg):
         """
         Comment on the current model
         """
         self._client.add_comment(self, msg)
-    
+
+    def trash(self):
+        self._client.trash(self)
+
     def get_comments(self):
         """
         Return a list of comments attached to this model
         """
         return self._client.get_comments(self)
-    
+
     def attach(self, filename, file_contents, **extra):
         """
         Add an attachment to the model
         """
         self._client.add_attachment(self, filename, file_contents, **extra)
-    
+
     # ---------------------------------
     # PRIVATE
     # ---------------------------------
@@ -192,13 +195,13 @@ class Model(object):
         for a in json:
             attachment = Attachment.create(self._client, a)
             self.attachments.append(attachment)
-    
+
     def __getitem__(self, k):
         """
         Allow key-based item accessing
         """
         return getattr(self, k)
-    
+
     def __setitem__(self, k, v):
         """
         Allow key-based item setting
@@ -355,7 +358,7 @@ class Page(Model):
     fields = {
         "name":            unicode,    # (string) - The Notebook Page title is a required value.
         "body":            unicode,    # (text) - The Notebook Page description.
-        "parent_id":    int,    # (integer) - The ID of the parent Page. Leave blank to add the page at the 
+        "parent_id":    int,    # (integer) - The ID of the parent Page. Leave blank to add the page at the
 
         "parent_type":    unicode    # not saveable, but is contained within the page json
     }
@@ -420,7 +423,7 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
                     real_labels.append(label["name"])
             init["labels"] = real_labels
         return super(Task, self)._create_fields(init)
-        
+
 
 # TODO subtasks
 # body (text) - The Subtask name is required field when creating a new Subtask.
@@ -430,7 +433,7 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
 # due_on (date) - Date when the subtask is due.
 
 # TODO discussions
-# 
+#
 
 class Attachment(Model):
     method = "attachment"
@@ -444,7 +447,7 @@ class Attachment(Model):
 
     def download(self):
         return self._client.download_attachment(self.permalink)
-    
+
 class Comment(Model, Attachable):
     method = "comments"
     fields = {
