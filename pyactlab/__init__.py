@@ -387,6 +387,23 @@ class ActLabClient(object):
 
         owner_model._create_fields(res["single"])
 
+    def get_attachments(self, model):
+        res = self._get_api("{}s/{}/attachments".format(
+            model.__class__.__name__.lower(),
+            model.id
+        ))
+        if res is None:
+            return []
+
+        if raw:
+            return res
+
+        attachments = []
+        for a in res:
+            attachments.append(models.Attachment.create(self, a))
+
+        return attachments
+
     def new_task(self, owner_model, name=None, body=None, assignee_id=None, due_on=None, is_important=None, labels=None, **others):
         base_path = owner_model.url_path + "/tasks"
 

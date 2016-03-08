@@ -283,6 +283,9 @@ class Attachable(object):
     def attach_file(self, filepath=None, data=None, filename=None):
         self._client.new_attachment(self, filepath=filepath, data=data, filename=filename)
 
+    def get_attachments(self):
+        self._client.get_attachments(self)
+
 class Project(Model,Taskable,Attachable):
     method = "project"
     needs_project_id = False
