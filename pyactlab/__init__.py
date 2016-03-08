@@ -687,11 +687,14 @@ class ActLabClient(object):
         res.creator = json["created_by"]["name"]
         res.created_on = json["created_on"]["formatted"]
 
-    def get_comments(self, task_id, raw=False):
+    def get_comments(self, model, raw=False):
         """
         Return a list of comments attached to the model
         """
-        res = self._get_api("comments/task/{}".format(task_id))
+        res = self._get_api("comments/task/{}".format(
+            model.__class__.__name__.lower(),
+            model.id
+        ))
         if res is None:
             return []
 

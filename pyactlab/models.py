@@ -84,20 +84,8 @@ class Model(object):
         res = getattr(self._client, "get_" + self.method)(*args, raw=True)
         self._create_fields(res)
 
-    def comment(self, msg):
-        """
-        Comment on the current model
-        """
-        self._client.add_comment(self, msg)
-
     def trash(self):
         self._client.trash(self)
-
-    def get_comments(self):
-        """
-        Return a list of comments attached to this model
-        """
-        return self._client.get_comments(self)
 
     def attach(self, filename, file_contents, **extra):
         """
@@ -265,6 +253,11 @@ class Commentable(object):
         """Add a comment to this model
         """
         return self._client.add_comment(self, comment)
+
+    def get_comments(self):
+        """return a list of all the comments attached to
+        this model"""
+        return self._client.get_comments(self)
 
 class Completable(object):
     def complete(self):
