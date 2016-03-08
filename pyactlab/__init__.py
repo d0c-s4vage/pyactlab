@@ -691,7 +691,7 @@ class ActLabClient(object):
         """
         Return a list of comments attached to the model
         """
-        res = self._get_api("comments/task/{}".format(
+        res = self._get_api("comments/{}/{}".format(
             model.__class__.__name__.lower(),
             model.id
         ))
