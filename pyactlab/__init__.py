@@ -256,8 +256,8 @@ class ActLabClient(object):
             task.id
         )
         params = {
-            "project_id": new_project.id,
-            copy: "true" if copy else "false",
+            "project_id": str(new_project.id),
+            "copy": "true" if copy else "false",
         }
         res = self._put_api(url, post_params=params)
 
