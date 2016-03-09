@@ -418,6 +418,10 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
             init["labels"] = real_labels
         return super(Task, self)._create_fields(init)
 
+    def move_to_project(self, new_project, copy=False):
+        """Move the task to the specified project, optionally
+        copying the task instead of moving"""
+        return self._client.move_task_to_project(self, new_project, copy=copy)
 
 # TODO subtasks
 # body (text) - The Subtask name is required field when creating a new Subtask.

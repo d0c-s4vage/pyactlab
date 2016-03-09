@@ -244,6 +244,29 @@ class ActLabClient(object):
         t.project_id = project_id
         return t
 
+    def move_task_to_project(self, task, new_project, copy=False):
+        """
+        Move the specified task to the specified project, optionally
+        copying it over.
+
+        Returns a new Task object
+        """
+        url = "projects/{}/tasks/{}/move-to-project".format(
+            task.project_id,
+            task.id
+        )
+        params = {
+            "project_id": new_project.id,
+            copy: "true" if copy else "false",
+        }
+        res = self._post_api(url, post_params=params)
+
+        if res it None:
+            return None
+
+        task = models.Task.create(self, res["single"])
+        return task
+
     def get_tasks(self, project_id, raw=False, archived=False):
         """
         Fetch a list of all tasks in a project
