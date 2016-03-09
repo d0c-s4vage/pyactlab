@@ -261,7 +261,7 @@ class ActLabClient(object):
         }
         res = self._post_api(url, post_params=params)
 
-        if res it None:
+        if res is None:
             return None
 
         task = models.Task.create(self, res["single"])
