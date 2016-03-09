@@ -658,12 +658,12 @@ class ActLabClient(object):
         """
         Download the attachment specified by the url
         """
-        dl_url = self._api_url("attachments/{}/download".format(model.id))
-        res = requests.get(dl_url)
-        if res.ok:
-            return res.content
-        else:
-            raise ActLabError("Could not download attachment at {}".format(url))
+        res = self._get_api("attachments/{}/download".format(model.id), raw=True)
+
+        if res is None:
+            raise ActLabError("Could not download attachment {}".format(model.id))
+
+        return res
 
     def add_attachment(self, model, name, data, **extra):
         """
@@ -881,7 +881,7 @@ class ActLabClient(object):
             url += "?" + params_str
         return url
 
-    def _get_api(self, page, query_params=None):
+    def _get_api(self, page, query_params=None, raw=False):
         """
         Normal arguments are path parts, kwargs are the GET param key/value pairs
         """
@@ -899,7 +899,10 @@ class ActLabClient(object):
             raise ConnectionError()
 
         if res.ok:
-            return self._auto_convert(res.content)
+            if raw:
+                return res.content
+            else:
+                return self._auto_convert(res.content)
         else:
             return None
 
