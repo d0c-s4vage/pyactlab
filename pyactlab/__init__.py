@@ -654,11 +654,11 @@ class ActLabClient(object):
 
     # MISC -------------------------
 
-    def download_attachment(self, url):
+    def download_attachment(self, model):
         """
         Download the attachment specified by the url
         """
-        dl_url = url + "&auth_api_token=" + self._key
+        dl_url = self._api_url("attachments/{}/download".format(model.id))
         res = requests.get(dl_url)
         if res.ok:
             return res.content
