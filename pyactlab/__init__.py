@@ -259,7 +259,7 @@ class ActLabClient(object):
             "project_id": new_project.id,
             copy: "true" if copy else "false",
         }
-        res = self._post_api(url, post_params=params)
+        res = self._put_api(url, post_params=params)
 
         if res is None:
             return None
