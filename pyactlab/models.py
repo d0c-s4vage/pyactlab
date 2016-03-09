@@ -46,6 +46,7 @@ class Model(object):
             if hasattr(self, k):
                 setattr(self, k, v)
 
+        self.attachments = []
         self._create_fields(init=fields)
 
     def get_fields(self):
