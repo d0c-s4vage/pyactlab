@@ -262,7 +262,9 @@ class ActLabClient(object):
         res = self._put_api(url, post_params=params)
 
         if res is None:
-            return None
+            raise ActLabError("Could not move task to project '{}'".format(
+                new_project.id
+            ))
 
         task = models.Task.create(self, res["single"])
         return task
