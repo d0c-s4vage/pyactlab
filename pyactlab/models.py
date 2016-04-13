@@ -83,7 +83,7 @@ class Model(object):
             args = [self.id]
 
         res = getattr(self._client, "get_" + self.method)(*args, raw=True)
-        self._create_fields(res)
+        self._create_fields(res["single"])
 
     def trash(self):
         self._client.trash(self)
