@@ -159,14 +159,21 @@ class ActLabClient(object):
         projects = [models.Project.create(self, p) for p in res]
         return projects
 
+    def get_project_raw(self, project_id):
+        """Return the raw project data, or None if it doesn't exist"""
+        res = self._get_api("projects/" + str(project_id))
+        return res
+
     def get_project(self, project_id, raw=False):
         """
         Return a single project by id
         """
-        res = self._get_api("projects/" + str(project_id))
-
+        res = self.get_project_raw(project_id)
         if raw:
             return res
+
+        if res is None:
+            return None
 
         return models.Project.create(self, res["single"])
 
@@ -339,17 +346,25 @@ class ActLabClient(object):
         task_list = models.TaskList.create(self, res["single"])
         return task_list
 
+    def get_task_raw(self, project_id, task_id):
+        """
+        Return the raw task information
+        """
+        res = self._get_api("projects/{pid}/tasks/{tid}".format(pid=project_id, tid=task_id))
+
+        return res
+
     def get_task(self, project_id, task_id, raw=False):
         """
         Return the task in the project denoted by `project_id` and specified by `task_id`
         """
-        res = self._get_api("projects/{pid}/tasks/{tid}".format(pid=project_id, tid=task_id))
-
-        if res is None:
-            return None
+        res = self.get_task_raw(project_id, task_id)
 
         if raw:
             return res
+
+        if res is None:
+            return None
 
         return models.Task.create(self, res["single"])
 
