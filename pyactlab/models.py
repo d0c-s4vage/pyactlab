@@ -402,6 +402,7 @@ class Task(Model, Taskable, Attachable, Commentable, Completable):
         "other_assignees":    list,    # (array) - The people assigned to the Task.
         # TODO
         "due_on":            unicode,    # (date) - The task due date.
+        "start_on":          unicode,
         "created_by_id":    int,    # (integer) - Use for a known user who already has an account in the system.
         "created_by_name":    unicode,    # (string) - Use for anonymous user, who don't have an account in the system (can not be used with created_by_id).
         "created_by_email":    unicode    # (string) - Used for anonymous users.
