@@ -831,7 +831,7 @@ class ActLabClient(object):
             "file[body]": file_data,
             "submitted": "submitted",
             "attachments": {
-                "attachment_0": (filename, file_data, "application/octet-stream"),
+                "file": (filename, file_data, "application/octet-stream"),
             },
         }
         res = self._post_api("upload-files", post_params=fields)
